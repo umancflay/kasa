@@ -1,0 +1,4 @@
+.claude/
+.DS_Store
+*.json.bak
+kasa-yedek-*.json

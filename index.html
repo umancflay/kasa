@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0a0a0b">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Kasa">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Kasa — Mülk & Finans</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- Kilit ekranı -->
+  <div id="lock" class="lock">
+    <div class="lock-card">
+      <div class="brand brand-lg"><span class="logo"></span><span>Kasa</span></div>
+      <p class="lock-sub" id="lockSub">Mülk & kişisel finans paneli</p>
+      <form id="lockForm" autocomplete="off">
+        <div class="field">
+          <label for="pw1">Şifre</label>
+          <input id="pw1" type="password" autocomplete="current-password" required minlength="6">
+        </div>
+        <div class="field" id="pw2Wrap" hidden>
+          <label for="pw2">Şifre (tekrar)</label>
+          <input id="pw2" type="password" autocomplete="new-password" minlength="6">
+        </div>
+        <p class="lock-err" id="lockErr"></p>
+        <button class="btn btn-primary btn-block" id="lockBtn" type="submit">Kilidi aç</button>
+      </form>
+      <p class="lock-note" id="lockNote"></p>
+      <button class="btn btn-ghost btn-sm" id="lockImport" type="button">Yedekten geri yükle</button>
+      <input type="file" id="lockImportFile" accept=".json,application/json" hidden>
+    </div>
+  </div>
+
+  <div id="app" class="app" hidden>
+    <aside class="sidebar" id="sidebar">
+      <div class="brand"><span class="logo"></span><span>Kasa</span></div>
+      <nav id="nav"></nav>
+      <div class="side-foot">
+        <button class="btn btn-ghost btn-block" id="lockNow"><span data-i="lock"></span> Kilitle</button>
+      </div>
+    </aside>
+    <div class="scrim" id="scrim"></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn only-sm" id="menuBtn" aria-label="Menü"><span data-i="menu"></span></button>
+        <div class="search">
+          <span data-i="search"></span>
+          <input id="globalSearch" placeholder="Kiracı, mülk, kayıt ara…" autocomplete="off">
+          <kbd class="hide-sm">⌘K</kbd>
+          <div class="search-results" id="searchResults" hidden></div>
+        </div>
+        <div class="top-right">
+          <div class="ticker hide-sm" id="ticker"></div>
+          <button class="icon-btn" id="quickAdd" aria-label="Hızlı kayıt"><span data-i="plus"></span></button>
+          <div class="user-chip hide-sm"><span class="avatar" id="avatar">K</span><div><b id="userName">Kasa</b><small id="lockTimer">Oturum açık</small></div></div>
+        </div>
+      </header>
+      <main id="view" class="view"></main>
+    </div>
+
+    <nav class="bottom-nav" id="bottomNav"></nav>
+  </div>
+
+  <div id="modalRoot"></div>
+  <div id="toasts" class="toasts"></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
