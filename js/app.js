@@ -1,9 +1,11 @@
 // Uygulama kabuğu: kilit ekranı, menü, yönlendirme, arama, otomatik kilit.
 import * as S from './store.js';
-import { icon, hydrateIcons, esc, money, toast } from './ui.js';
+import { icon, hydrateIcons, esc, money, toast, modal, formModal, date } from './ui.js';
+import * as Sync from './sync.js';
 import { defaultState, byId } from './domain.js';
 import { setRerender, quickAdd, editTenant, editEntry } from './editors.js';
 import { evPanel, properties, tenants, verim, contracts, taxView, propertyDetail } from './views-ev.js';
+import { taxGuide } from './views-guide.js';
 import { overview, ledgerView, debtsView, sahsiPanel, invest, news, notesView, settingsView, fetchPrices, rates } from './views-main.js';
 
 const NAV = [
@@ -22,6 +24,7 @@ const NAV = [
     ['#/borclar/ev', 'card', 'Ev Borçları'],
     ['#/sozlesmeler', 'file', 'Sözleşmeler'],
     ['#/vergi', 'percent', 'Vergi (GMSİ)'],
+    ['#/vergi-rehberi', 'shield', 'İstisnalar & Hesap'],
   ]],
   ['Şahsi', [
     ['#/sahsi', 'user', 'Şahsi Panel'],
@@ -30,7 +33,7 @@ const NAV = [
     ['#/yatirim', 'coins', 'Yatırımlar'],
   ]],
   ['Sistem', [
-    ['#/ayarlar', 'gear', 'Ayarlar'],
+    ['#/ayarlar', 'gear', 'Ayarlar & Senkron'],
   ]],
 ];
 const BOTTOM = [['#/', 'grid', 'Genel'], ['#/ev', 'building', 'Ev'], ['#/kiracilar', 'users', 'Kiracı'], ['#/sahsi', 'user', 'Şahsi'], ['menu', 'menu', 'Menü']];
@@ -47,6 +50,8 @@ function route() {
     l.classList.toggle('active', href === h || (href !== '#/' && h.startsWith(href + '/')) || (href === '#/' && (h === '#' || h === '#/')));
   });
   closeMenu();
+  const cur = NAV.flatMap((g) => g[1]).find(([href]) => href === h) || NAV.flatMap((g) => g[1]).find(([href]) => href !== '#/' && h.startsWith(href));
+  $('crumb').textContent = cur ? cur[2] : 'Genel Bakış';
   const r = {
     '': () => overview(view),
     ev: () => evPanel(view),
@@ -57,11 +62,12 @@ function route() {
     borclar: () => debtsView(view, b === 'sahsi' ? 'sahsi' : 'ev'),
     sozlesmeler: () => contracts(view),
     vergi: () => taxView(view),
+    'vergi-rehberi': () => taxGuide(view),
     sahsi: () => sahsiPanel(view),
     yatirim: () => invest(view),
     haberler: () => news(view),
     notlar: () => notesView(view),
-    ayarlar: () => settingsView(view, { onLock: doLock }),
+    ayarlar: () => settingsView(view, { onLock: doLock, onSync: runSync, syncStatus: () => Sync.status, onPassword: (p) => { sessionPass = p; } }),
   }[a || ''] || (() => overview(view));
   try { r(); } catch (e) { console.error(e); view.innerHTML = `<div class="card note red">Bir hata oluştu: ${esc(e.message)}</div>`; }
 }
@@ -88,6 +94,8 @@ function closeMenu() { $('sidebar').classList.remove('open'); $('scrim').classLi
 $('menuBtn').addEventListener('click', openMenu);
 $('scrim').addEventListener('click', closeMenu);
 $('quickAdd').addEventListener('click', quickAdd);
+$('sideNew').addEventListener('click', () => { closeMenu(); quickAdd(); });
+$('sideNew2').addEventListener('click', () => { closeMenu(); quickAdd(); });
 $('lockNow').addEventListener('click', () => doLock());
 
 // ---------- Arama ----------
@@ -119,6 +127,58 @@ async function ticker() {
   } catch { $('ticker').innerHTML = ''; }
 }
 
+// ---------- Cihazlar arası senkron ----------
+let sessionPass = null, lastSyncTry = 0;
+function paintSync(st) {
+  const b = $('syncBtn');
+  b.className = 'icon-btn sync-btn ' + (Sync.cfg() ? st.state : 'off');
+  b.title = Sync.cfg() ? `${st.msg || ''} ${st.at ? new Date(st.at).toLocaleTimeString('tr-TR') : ''}` : 'Senkron kapalı — Ayarlar\'dan açın';
+}
+Sync.onStatus(paintSync);
+function chooseSide(m) {
+  return new Promise((res) => {
+    const mm = modal({
+      title: 'Hangi veriler kullanılsın?',
+      body: `<p style="margin-top:0">Bu cihazdaki veriler ile buluttaki veriler farklı. Hangisi geçerli olsun?</p>
+        <div class="choice"><button class="btn" data-c="remote"><div><b>Buluttakini kullan</b><small>Son güncelleme: ${date(new Date(m.stamp), { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })} — bu cihazdaki veriler silinir</small></div></button>
+        <button class="btn" data-c="local"><div><b>Bu cihazdakini buluta gönder</b><small>Buluttaki veriler bu cihazdakiyle değiştirilir</small></div></button></div>`,
+    });
+    mm.el.querySelectorAll('[data-c]').forEach((b) => b.onclick = () => { mm.close(); res(b.dataset.c); });
+    mm.el.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', () => res('cancel')));
+  });
+}
+async function runSync(force = false) {
+  if (!S.isUnlocked() || !Sync.cfg() || !sessionPass) { paintSync(Sync.status); return; }
+  if (!force && Date.now() - lastSyncTry < 20000) return;
+  lastSyncTry = Date.now();
+  try {
+    const r = await Sync.sync(sessionPass, { choose: chooseSide });
+    if (r === 'pulled') { enterUI(); toast('Diğer cihazdaki güncel veriler yüklendi'); }
+  } catch (e) {
+    if (/farklı bir şifre/.test(e.message)) askCloudPassword();
+    else toast('Senkron: ' + e.message, true);
+  }
+}
+// Buluttaki kasa başka şifreyle (ör. diğer cihazda şifre değişti) — tek şifreye geçmek için sor
+function askCloudPassword() {
+  formModal({
+    title: 'Buluttaki kasanın şifresi',
+    values: {},
+    fields: [{ k: 'pw', label: 'Diğer cihazda kullandığınız (güncel) şifre', type: 'password', req: true, full: true }],
+    extra: '<div class="note mt">Buluttaki veriler farklı bir şifreyle korunuyor (şifre diğer cihazda değiştirilmiş olabilir). Güncel şifreyi girin; bu cihaz da artık aynı şifreyi kullanacak.</div>',
+    onSave: async (v) => {
+      const old = sessionPass;
+      sessionPass = v.pw;
+      try {
+        const r = await Sync.sync(sessionPass, { choose: async () => 'remote' });
+        if (r === 'pulled') { enterUI(); toast('Eşitlendi — artık tek şifre kullanılıyor'); }
+      } catch (e) { sessionPass = old; toast(e.message, true); return false; }
+    },
+  });
+}
+$('syncBtn').addEventListener('click', () => (Sync.cfg() ? runSync(true) : (location.hash = '#/ayarlar')));
+setInterval(() => { if (document.visibilityState === 'visible') runSync(); }, 90000);
+
 // ---------- Kilit / otomatik kilit ----------
 let idleTimer = null, lastAct = Date.now();
 function bumpIdle() { lastAct = Date.now(); }
@@ -137,12 +197,14 @@ document.addEventListener('visibilitychange', () => {
   // Arka planda uzun kalınca kilitle
   if (document.visibilityState === 'hidden') S.flush();
   else if (S.isUnlocked() && Date.now() - lastAct > (Number(S.state.settings.autoLockMin) || 10) * 60000) doLock();
+  else runSync();
 });
 window.addEventListener('beforeunload', () => { S.flush(); });
 
 async function doLock() {
   await S.flush();
   S.lock();
+  sessionPass = null;
   document.getElementById('modalRoot').innerHTML = '';
   view.innerHTML = '';
   $('app').hidden = true;
@@ -175,6 +237,7 @@ function showLock(firstRun) {
         $('lockBtn').textContent = 'Açılıyor…';
         await S.unlock(p1);
       }
+      sessionPass = p1;
       enter();
     } catch (err) {
       $('lockErr').textContent = err.message || 'Hata';
@@ -189,7 +252,30 @@ $('lockImportFile').addEventListener('change', async (e) => {
   try { await S.importBackup(await f.text()); toast('Yedek yüklendi — yedeğin şifresiyle giriş yapın'); showLock(false); } catch (err) { $('lockErr').textContent = err.message; }
 });
 
+$('lockCloud').addEventListener('click', () => formModal({
+  title: 'Buluttan eşitle (GitHub)',
+  values: { owner: 'umancflay', repo: 'kasa-data' },
+  fields: [
+    { k: 'owner', label: 'GitHub kullanıcı adı', req: true },
+    { k: 'repo', label: 'Gizli veri reposu', req: true },
+    { k: 'token', label: 'GitHub erişim anahtarı (token)', type: 'password', req: true, full: true, hint: 'Diğer cihazda Ayarlar → Senkron bölümünde kullandığınız anahtar' },
+  ],
+  extra: '<div class="note blue mt">Buluttaki şifreli kasa bu cihaza indirilir; <b>bu cihazdaki mevcut kasa silinir.</b> Ardından diğer cihazdaki şifrenizle giriş yaparsınız.</div>',
+  onSave: async (v) => {
+    try {
+      await Sync.bootstrap({ ...v, enabled: true });
+      toast('Kasa indirildi — diğer cihazdaki şifrenizle giriş yapın');
+      showLock(false);
+    } catch (e) { toast(e.message, true); return false; }
+  },
+}));
+
 function enter() {
+  S.onSaved(() => Sync.schedulePush());
+  enterUI();
+  runSync(true);
+}
+function enterUI() {
   // Eski sürümlerden gelen verilerde eksik alanları tamamla
   const d = defaultState();
   for (const k of Object.keys(d)) if (S.state[k] === undefined) S.state[k] = d[k];
@@ -202,6 +288,7 @@ function enter() {
   bumpIdle(); startIdle();
   route();
   ticker();
+  paintSync(Sync.status);
 }
 
 // ---------- Başlat ----------

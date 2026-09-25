@@ -9,6 +9,7 @@ Kiraya verilen ev ve dükkanların, kiracıların, kira artışlarının, vergil
 - Kiracı bilgileri (iletişim, kefil, acil durum kişisi, depozito, stopaj durumu)
 - 12 aylık **tahsilat ızgarası**: kutucuğa dokun, kira tahsil edildi → otomatik olarak Ev Defteri'ne işlenir
 - **Zam & Verim**: TÜFE 12 aylık ortalamasına göre yasal azami kira, yenileme takvimi, emsal kira karşılaştırması, 5 yıl (kira tespit davası) ve 10 yıl (TBK 347) uyarıları, otomatik öneriler
+- **İstisnalar rehberi & hesaplayıcı**: konut istisnası şartları, stopaj beyan sınırı, hisseli mülk, gider yöntemleri, adım adım hesap
 - **Vergi (GMSİ)**: konut istisnası, stopajlı işyeri beyan sınırı, götürü (%15) ve gerçek gider karşılaştırması, amortisman, gelir vergisi dilimleri, stopaj mahsubu, emlak vergisi, vergi takvimi
 - Kira sözleşmesi / tapu / makbuz fotoğrafları ve PDF'ler (şifreli saklanır)
 - Ev defteri ve ev borçları (şahsi hesaplardan tamamen ayrı)
@@ -28,7 +29,8 @@ Kiraya verilen ev ve dükkanların, kiracıların, kira artışlarının, vergil
 - Şifre hiçbir yere kaydedilmez. **Şifre unutulursa veriler kurtarılamaz.**
 - Hareketsizlikte otomatik kilit (varsayılan 10 dk).
 - Bu depoda hiçbir kişisel veri yoktur; veriler yalnızca kullanılan cihazda durur.
-- Cihazlar arası taşıma: Ayarlar → *Şifreli yedek indir* → diğer cihazda *Yedekten yükle*.
+- **Cihazlar arası senkron:** şifreli kasa, kullanıcının gizli GitHub reposuna (`kasa-data`) yazılır; tüm cihazlar tek şifreyle aynı veriyi görür. Şifre değişikliği diğer cihazlara da geçer.
+- Elle taşıma da mümkün: Ayarlar → *Şifreli yedek indir* → diğer cihazda *Yedekten yükle*.
 
 ## Kullanım
 
@@ -57,7 +59,6 @@ sonra `http://localhost:8765` adresini açın.
 ## Yol haritası
 
 - Binance hesabı bağlantısı (read-only API anahtarı + Cloudflare Worker proxy)
-- Cihazlar arası otomatik senkron (uçtan uca şifreli)
 - TÜFE oranının otomatik çekilmesi
 - Kira hatırlatma bildirimleri
 
@@ -73,6 +74,8 @@ js/domain.js        Kategoriler, vergi/kira hesapları, demo veri
 js/editors.js       Ekleme/düzenleme pencereleri
 js/views-ev.js      Ev paneli, mülkler, kiracılar, zam & verim, sözleşmeler, vergi
 js/views-main.js    Genel bakış, defterler, borçlar, şahsi, yatırım, haberler, ayarlar
+js/views-guide.js   Vergi istisnaları rehberi + adım adım hesaplayıcı
+js/sync.js          Cihazlar arası şifreli senkron (GitHub gizli repo)
 js/app.js           Yönlendirme, arama, otomatik kilit
 sw.js               Çevrimdışı önbellek
 ```

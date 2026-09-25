@@ -69,7 +69,7 @@ export function evPanel(el) {
   </div>
   <div class="grid g-main mt">
     <div class="card"><div class="card-head"><div><h3>Ev nakit akışı</h3><small>Son 12 ay · stopaj sonrası</small></div>
-      <div class="legend"><span style="color:var(--accent)"><i style="background:var(--accent)"></i>Gelir</span><span style="color:var(--blue)"><i style="background:var(--blue)"></i>Gider</span></div></div>
+      <div class="legend"><span style="color:var(--accent)"><i style="background:var(--accent)"></i>Gelir</span><span style="color:var(--cream)"><i style="background:var(--cream)"></i>Gider</span></div></div>
       <div id="evChart"></div></div>
     <div class="card"><div class="card-head"><div><h3>Bu ay tahsilat</h3><small>${date(new Date(), { month: 'long', year: 'numeric' })}</small></div>
       <span class="badge ${unpaid.length ? 'down' : 'up'}">${unpaid.length ? unpaid.length + ' bekliyor' : 'Tamamı tahsil edildi'}</span></div>
@@ -88,7 +88,7 @@ export function evPanel(el) {
   </div>`;
   lineChart(el.querySelector('#evChart'), {
     labels: months.map((x) => MONTHS[+x.slice(5) - 1]),
-    series: [{ name: 'Gelir', color: '#ff7a1a', values: m.map((x) => x.gelir), area: true }, { name: 'Gider', color: '#6b7cff', values: m.map((x) => x.gider) }],
+    series: [{ name: 'Gelir', color: '#ff5a1f', values: m.map((x) => x.gelir), area: true }, { name: 'Gider', color: '#ffc27a', values: m.map((x) => x.gider) }],
     tipTitle: (i) => date(months[i], { month: 'long', year: 'numeric' }),
   });
   donut(el.querySelector('#evDonut'), Object.entries(expCats).sort((a, b) => b[1] - a[1]).map(([label, value]) => ({ label, value })), { center: 'Toplam gider' });
@@ -345,6 +345,7 @@ export function taxView(el) {
   const b = r.p.brackets;
   el.innerHTML = head('Vergi (GMSİ) — Kira Geliri', `${taxYear} yılı kira gelirleri · beyanname ${taxYear + 1} Mart ayında verilir`,
     `<div class="seg">${years.map((y) => `<button class="${y === taxYear ? 'on' : ''}" data-y="${y}">${y}</button>`).join('')}</div>
+     <a class="btn" href="#/vergi-rehberi">${icon('shield')} İstisnalar rehberi</a>
      <div class="seg"><button class="${taxBasis === 'actual' ? 'on' : ''}" data-b="actual">Gerçekleşen</button><button class="${taxBasis === 'projected' ? 'on' : ''}" data-b="projected">Kontrat bazlı tahmin</button></div>`) + `
   <div class="grid g-4">
     ${kpi('coins', '', 'Brüt kira geliri', money(r.totalGross), `Konut ${compact(r.konut)} · İşyeri ${compact(r.isyeriStopajli + r.isyeriStopajsiz)}`)}

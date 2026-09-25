@@ -206,7 +206,7 @@ export function lineChart(el, { labels, series, height = 260, bars = true, fmt =
   const y = (v) => pt + (1 - (v - min) / (max - min)) * (H - pt - pb);
   const id = 'g' + Math.random().toString(36).slice(2, 7);
   let svg = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="height:${H}px">
-    <defs>${series.map((s, i) => `<linearGradient id="${id}${i}" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="${s.color}" stop-opacity=".35"/><stop offset="1" stop-color="${s.color}" stop-opacity="0"/></linearGradient>`).join('')}
+    <defs>${series.map((s, i) => `<linearGradient id="${id}${i}" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="${s.color}" stop-opacity=".45"/><stop offset="1" stop-color="${s.color}" stop-opacity="0"/></linearGradient>`).join('')}
     <filter id="${id}glow" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>`;
   for (let k = 0; k <= 4; k++) { const yy = pt + (k * (H - pt - pb)) / 4; svg += `<line class="grid-line" x1="0" x2="${W}" y1="${yy}" y2="${yy}"/>`; }
   if (bars && series[0]) {
@@ -254,20 +254,51 @@ export function lineChart(el, { labels, series, height = 260, bars = true, fmt =
   svgEl.addEventListener('touchend', onLeave);
 }
 
-export const PALETTE = ['#ff7a1a', '#6b7cff', '#2ecc71', '#f5c542', '#b36bff', '#27c3d9', '#ff4d6d', '#9aa0a6'];
+export const PALETTE = ['#ff5a1f', '#ffa149', '#e8412c', '#ffd08a', '#c43a2a', '#ff7b3a', '#a8552f', '#8d8a86'];
+// Polar alan grafiği (dilim yarıçapı değere göre) — referans tasarımdaki "Findings" grafiği
 export function donut(el, items, { fmt = compact, center = '' } = {}) {
   const total = items.reduce((a, b) => a + Math.max(0, b.value), 0);
-  const R = 70, C = 2 * Math.PI * R;
-  let off = 0;
-  const arcs = total ? items.map((it, i) => {
-    const len = (Math.max(0, it.value) / total) * C;
-    const s = `<circle r="${R}" cx="90" cy="90" fill="none" stroke="${it.color || PALETTE[i % PALETTE.length]}" stroke-width="18" stroke-dasharray="${Math.max(0, len - 2)} ${C}" stroke-dashoffset="${-off}" transform="rotate(-90 90 90)"/>`;
-    off += len; return s;
-  }).join('') : `<circle r="${R}" cx="90" cy="90" fill="none" stroke="var(--line)" stroke-width="18"/>`;
-  el.innerHTML = `<div class="donut-wrap"><div class="chart"><svg viewBox="0 0 180 180">${arcs}
-    <text x="90" y="86" text-anchor="middle" fill="var(--muted)" font-size="11">${esc(center || 'Toplam')}</text>
-    <text x="90" y="106" text-anchor="middle" fill="var(--text)" font-size="16" font-weight="700">${esc(fmt(total))}</text></svg></div>
-    <div class="donut-legend">${items.map((it, i) => `<div><span class="dot" style="background:${it.color || PALETTE[i % PALETTE.length]}"></span><span>${esc(it.label)}</span><b>${total ? Math.round((Math.max(0, it.value) / total) * 100) : 0}%</b></div>`).join('') || '<small>Veri yok</small>'}</div></div>`;
+  const list = items.slice(0, 8);
+  const max = Math.max(...list.map((i) => i.value), 1);
+  const C = 110, R = 96, n = list.length || 1;
+  const id = 'p' + Math.random().toString(36).slice(2, 7);
+  const pt = (a, r) => [C + r * Math.sin(a), C - r * Math.cos(a)];
+  let g = `<defs><radialGradient id="${id}bg"><stop offset="0" stop-color="#ff5a1f" stop-opacity=".22"/><stop offset="1" stop-color="#ff5a1f" stop-opacity="0"/></radialGradient>
+    ${list.map((it, i) => `<radialGradient id="${id}${i}" cx="${C}" cy="${C}" r="${R}" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#e8412c" stop-opacity=".9"/><stop offset="1" stop-color="${it.color || PALETTE[i % PALETTE.length]}" stop-opacity=".85"/></radialGradient>`).join('')}</defs>
+    <circle cx="${C}" cy="${C}" r="${R + 12}" fill="url(#${id}bg)"/>`;
+  list.forEach((it, i) => {
+    if (it.value <= 0) return;
+    const r = Math.max(10, Math.sqrt(it.value / max) * R);
+    const a0 = (i / n) * 2 * Math.PI, a1 = ((i + 1) / n) * 2 * Math.PI;
+    const [x0, y0] = pt(a0, r), [x1, y1] = pt(a1, r);
+    g += n === 1 ? `<circle cx="${C}" cy="${C}" r="${r}" fill="url(#${id}${i})"/>`
+      : `<path d="M${C},${C} L${x0},${y0} A${r},${r} 0 ${a1 - a0 > Math.PI ? 1 : 0} 1 ${x1},${y1} Z" fill="url(#${id}${i})" stroke="rgba(20,12,10,.6)" stroke-width="1"><title>${esc(it.label)}: ${esc(fmt(it.value))}</title></path>`;
+  });
+  for (let k = 1; k <= 4; k++) g += `<circle cx="${C}" cy="${C}" r="${(R * k) / 4}" fill="none" stroke="rgba(255,210,180,.16)" stroke-width="1"/>`;
+  for (let k = 0; k < 12; k++) { const [x, y] = pt((k / 12) * 2 * Math.PI, R + 6); g += `<line x1="${C}" y1="${C}" x2="${x}" y2="${y}" stroke="rgba(255,210,180,.1)"/>`; }
+  el.innerHTML = `<div class="donut-wrap"><div class="chart"><svg viewBox="0 0 220 220">${g}</svg></div>
+    <div class="donut-legend"><div class="donut-total"><small>${esc(center || 'Toplam')}</small><b>${esc(fmt(total))}</b></div>${list.map((it, i) => `<div><span class="dot" style="background:${it.color || PALETTE[i % PALETTE.length]}"></span><span>${esc(it.label)}</span><b>${total ? Math.round((Math.max(0, it.value) / total) * 100) : 0}%</b></div>`).join('') || '<small>Veri yok</small>'}</div></div>`;
+}
+// Radar grafiği: axes = ['...'], series = [{name,color,values:[0..1]}]
+export function radar(el, { axes, series }) {
+  const W = 420, H = 330, C = [W / 2, H / 2 + 6], R = 112, n = axes.length;
+  const pt = (i, r) => [C[0] + r * Math.sin((i / n) * 2 * Math.PI), C[1] - r * Math.cos((i / n) * 2 * Math.PI)];
+  const poly = (r) => axes.map((_, i) => pt(i, r).join(',')).join(' ');
+  const id = 'r' + Math.random().toString(36).slice(2, 7);
+  let g = `<defs><radialGradient id="${id}"><stop offset="0" stop-color="#ff5a1f" stop-opacity=".35"/><stop offset=".7" stop-color="#ff5a1f" stop-opacity=".05"/><stop offset="1" stop-color="#ff5a1f" stop-opacity="0"/></radialGradient></defs>
+    <circle cx="${C[0]}" cy="${C[1]}" r="${R + 40}" fill="url(#${id})"/>`;
+  for (let k = 1; k <= 5; k++) g += `<polygon points="${poly((R * k) / 5)}" fill="none" stroke="rgba(255,210,180,${k === 5 ? 0.28 : 0.12})"/>`;
+  axes.forEach((a, i) => {
+    const [x, y] = pt(i, R); g += `<line x1="${C[0]}" y1="${C[1]}" x2="${x}" y2="${y}" stroke="rgba(255,210,180,.12)"/>`;
+    const [lx, ly] = pt(i, R + 20);
+    g += `<text x="${lx}" y="${ly + 4}" text-anchor="${Math.abs(lx - C[0]) < 8 ? 'middle' : lx > C[0] ? 'start' : 'end'}" fill="var(--text-2)" font-size="11.5">${esc(a)}</text>`;
+  });
+  series.forEach((s) => {
+    const pts = s.values.map((v, i) => pt(i, Math.max(0.04, Math.min(1, v)) * R).join(',')).join(' ');
+    g += `<polygon points="${pts}" fill="${s.color}" fill-opacity="${s.fill ?? 0.3}" stroke="${s.color}" stroke-width="1.6" stroke-linejoin="round"${s.dash ? ' stroke-dasharray="4 4"' : ''}/>`;
+  });
+  el.classList.add('chart');
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}">${g}</svg>`;
 }
 export function barList(items, { fmt = compact, cls = '' } = {}) {
   const max = Math.max(...items.map((i) => Math.abs(i.value)), 1);

@@ -54,6 +54,8 @@ const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 
 let key = null;
 let saveTimer = null;
+let savedHook = null;
+export const onSaved = (f) => { savedHook = f; };
 export let state = null;
 
 export async function hasVault() { return !!(await get('meta')); }
@@ -90,6 +92,7 @@ export async function saveNow() {
   if (!key || !state) return;
   state.updatedAt = Date.now();
   await put('vault', await seal(key, enc.encode(JSON.stringify(state))));
+  savedHook?.();
 }
 export function save() {
   clearTimeout(saveTimer);
@@ -132,13 +135,20 @@ export const deleteFile = (id) => del('file:' + id);
 // ---------- Yedek: şifreli JSON (aynı şifreyle açılır) ----------
 export async function exportBackup() {
   await flush();
-  const out = { app: 'kasa', v: 1, exportedAt: new Date().toISOString(), items: {} };
+  const out = { app: 'kasa', v: 1, exportedAt: new Date().toISOString(), stamp: state?.updatedAt || 0, items: {} };
   for (const k of await keys()) {
     const v = await get(k);
     if (k === 'meta') out.items[k] = { salt: b64(v.salt), iter: v.iter, created: v.created };
     else out.items[k] = { ...v, iv: b64(v.iv), ct: b64(v.ct) };
   }
   return new Blob([JSON.stringify(out)], { type: 'application/json' });
+}
+// Yedeği içe aktarmadan önce verilen şifreyle açılabildiğini doğrular
+export async function tryBackup(text, pass) {
+  const d = JSON.parse(text);
+  const m = d.items.meta, v = d.items.vault;
+  const k = await deriveKey(pass, unb64(m.salt), m.iter);
+  try { return JSON.parse(dec.decode(await open(k, { iv: unb64(v.iv), ct: unb64(v.ct) }))); } catch { throw new Error('Buluttaki kasa farklı bir şifreyle oluşturulmuş'); }
 }
 export async function importBackup(text) {
   const data = JSON.parse(text);

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#0a0a0b">
+  <meta name="theme-color" content="#1a110d">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -15,7 +15,7 @@
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -37,7 +37,10 @@
         <button class="btn btn-primary btn-block" id="lockBtn" type="submit">Kilidi aç</button>
       </form>
       <p class="lock-note" id="lockNote"></p>
-      <button class="btn btn-ghost btn-sm" id="lockImport" type="button">Yedekten geri yükle</button>
+      <div class="actions" style="justify-content:center">
+        <button class="btn btn-sm" id="lockCloud" type="button"><span data-i="refresh"></span> Buluttan eşitle</button>
+        <button class="btn btn-ghost btn-sm" id="lockImport" type="button">Yedekten yükle</button>
+      </div>
       <input type="file" id="lockImportFile" accept=".json,application/json" hidden>
     </div>
   </div>
@@ -45,6 +48,7 @@
   <div id="app" class="app" hidden>
     <aside class="sidebar" id="sidebar">
       <div class="brand"><span class="logo"></span><span>Kasa</span></div>
+      <div class="side-new"><button class="btn btn-primary" id="sideNew">Yeni kayıt</button><button class="btn btn-primary btn-sq" id="sideNew2" aria-label="Hızlı kayıt"><span data-i="plus"></span></button></div>
       <nav id="nav"></nav>
       <div class="side-foot">
         <button class="btn btn-ghost btn-block" id="lockNow"><span data-i="lock"></span> Kilitle</button>
@@ -55,6 +59,7 @@
     <div class="main">
       <header class="topbar">
         <button class="icon-btn only-sm" id="menuBtn" aria-label="Menü"><span data-i="menu"></span></button>
+        <div class="crumbs hide-sm"><span data-i="home"></span><span>›</span><b id="crumb">Genel Bakış</b></div>
         <div class="search">
           <span data-i="search"></span>
           <input id="globalSearch" placeholder="Kiracı, mülk, kayıt ara…" autocomplete="off">
@@ -63,6 +68,7 @@
         </div>
         <div class="top-right">
           <div class="ticker hide-sm" id="ticker"></div>
+          <button class="icon-btn sync-btn" id="syncBtn" aria-label="Eşitle" title="Senkron kapalı"><span data-i="refresh"></span></button>
           <button class="icon-btn" id="quickAdd" aria-label="Hızlı kayıt"><span data-i="plus"></span></button>
           <div class="user-chip hide-sm"><span class="avatar" id="avatar">K</span><div><b id="userName">Kasa</b><small id="lockTimer">Oturum açık</small></div></div>
         </div>

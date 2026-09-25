@@ -1,7 +1,7 @@
 // Genel bakış, defterler, borçlar, şahsi panel, yatırımlar, haberler, notlar, ayarlar.
 import * as S from './store.js';
-import { icon, esc, money, compact, pct, date, MONTHS, ym, todayISO, lineChart, donut, barList, emptyState, trend, toast, download, confirmBox, formModal, PALETTE } from './ui.js';
-import { CATS, parseDate, byId, activeTenant, rentInfo, monthly, lastMonths, cash, taxCalc, debtInfo, TAX_PRESETS, defaultState, demoState } from './domain.js';
+import { icon, esc, money, compact, pct, date, MONTHS, ym, todayISO, lineChart, donut, radar, barList, emptyState, trend, toast, download, confirmBox, formModal, PALETTE } from './ui.js';
+import { CATS, parseDate, byId, activeTenant, rentInfo, monthly, lastMonths, cash, taxCalc, debtInfo, paidPeriods, tenantActiveIn, TAX_PRESETS, defaultState, demoState } from './domain.js';
 import { editEntry, editDebt, payInstallment, editAsset, editNote, collectRent, commit, refresh } from './editors.js';
 import { kpi, head, unpaidThisMonth } from './views-ev.js';
 
@@ -29,6 +29,32 @@ function upcoming(s) {
   if (m === 6) out.push({ ic: 'receipt', cls: 'purple', t: 'Gelir vergisi 2. taksit', sub: '31 Temmuz son gün', when: new Date(now.getFullYear(), 6, 31), go: '#/vergi' });
   for (const p of s.properties) if (p.dask) { const dd = (parseDate(p.dask) - now) / 864e5; if (dd < 30) out.push({ ic: 'shield', cls: 'red', t: `DASK yenile: ${p.name}`, sub: date(p.dask), when: new Date(p.dask), go: '#/mulkler/' + p.type }); }
   return out.sort((a, b) => a.when - b.when);
+}
+
+// Finansal sağlık puanları (0–1)
+function healthScores(s) {
+  const cl = (v) => Math.max(0, Math.min(1, isFinite(v) ? v : 0));
+  const m3 = monthly(s.ledger, null, lastMonths(3));
+  const inc = m3.reduce((a, x) => a + x.gelir, 0) / 3, exp = m3.reduce((a, x) => a + x.gider, 0) / 3;
+  const props = s.properties, rented = props.filter((p) => activeTenant(s, p.id));
+  const vals = props.map((p) => Number(p.currentValue) || Number(p.purchasePrice) || 0);
+  const rentY = rented.reduce((a, p) => a + (Number(activeTenant(s, p.id).rent) || 0) * 12, 0);
+  const valSum = rented.reduce((a, p) => a + (Number(p.currentValue) || Number(p.purchasePrice) || 0), 0);
+  let due = 0, paid = 0;
+  const periods = lastMonths(3);
+  for (const t of s.tenants.filter((x) => x.active !== false)) { const pp = paidPeriods(s, t.id); for (const per of periods) if (tenantActiveIn(t, per)) { due++; if (pp.has(per)) paid++; } }
+  const debtM = s.debts.filter((d) => !debtInfo(d).done).reduce((a, d) => a + debtInfo(d).inst, 0);
+  const liquid = s.assets.filter((a) => ['mevduat', 'doviz', 'altin'].includes(a.kind)).reduce((a, x) => a + (Number(x.manualValue) || Number(x.cost) || 0), 0);
+  const act = s.tenants.filter((t) => t.active !== false);
+  return [
+    ['Tasarruf', cl(inc ? (inc - exp) / inc / 0.4 : 0)],
+    ['Doluluk', cl(props.length ? rented.length / props.length : 0)],
+    ['Kira getirisi', cl(valSum ? rentY / valSum / 0.08 : 0)],
+    ['Tahsilat', cl(due ? paid / due : 0)],
+    ['Borç rahatlığı', cl(inc ? 1 - debtM / inc / 0.6 : 0)],
+    ['Likidite', cl(exp ? liquid / (exp * 6) : 0)],
+    ['Zam güncelliği', cl(act.length ? act.filter((t) => !rentInfo(t, s).due).length / act.length : 0)],
+  ];
 }
 
 // ======================= GENEL BAKIŞ =======================
@@ -69,7 +95,7 @@ export function overview(el) {
   <div class="grid g-main mt">
     <div class="card">
       <div class="card-head"><div><h3>Gelir ve gider akışı</h3>
-        <div class="legend" style="margin-top:8px"><span style="color:var(--accent)"><i style="background:var(--accent)"></i>Gelir</span><span style="color:var(--blue)"><i style="background:var(--blue)"></i>Gider</span><span style="color:var(--green)"><i style="background:var(--green)"></i>Net</span></div></div>
+        <div class="legend" style="margin-top:8px"><span style="color:var(--accent)"><i style="background:var(--accent)"></i>Gelir</span><span style="color:var(--cream)"><i style="background:var(--cream)"></i>Gider</span><span style="color:#ff3b30"><i style="background:#ff3b30"></i>Net</span></div></div>
         <div class="seg">${[['all', 'Toplam'], ['ev', 'Ev'], ['sahsi', 'Şahsi']].map(([k, l]) => `<button class="${ovScope === k ? 'on' : ''}" data-sc="${k}">${l}</button>`).join('')}</div></div>
       <div id="ovChart"></div>
     </div>
@@ -82,25 +108,35 @@ export function overview(el) {
         <div class="sum-item" data-go="#/borclar/sahsi"><span class="ico red">${icon('card')}</span><div><div class="v">${compact(debtLeft)}</div><div class="l">Kalan toplam borç</div></div><span class="go">${icon('arrow')}</span></div>
       </div></div>
   </div>
-  <div class="grid g-2 mt">
+  <div class="grid g-main mt">
+    <div class="card"><div class="card-head"><div><h3>Finansal sağlık haritası</h3><small>Verilerinize göre 0–100 puan</small></div>
+      <div class="radar-legend"><span><i class="dot" style="background:#ff5a1f"></i>Mevcut</span><span><i class="dot" style="background:#ffc27a"></i>Hedef</span></div></div>
+      <div id="ovRadar"></div><div id="ovScores" class="radar-legend" style="justify-content:center;margin-top:6px"></div></div>
     <div class="card"><div class="card-head"><h3>Yaklaşanlar & hatırlatmalar</h3><span class="badge">${up.length}</span></div>
       <div class="sum-list">${up.map((u) => `<div class="sum-item" data-go="${u.go}"><span class="ico ${u.cls}">${icon(u.ic)}</span><div style="min-width:0"><div style="font-weight:600">${esc(u.t)}</div><div class="l">${esc(u.sub)}</div></div><span class="go">${icon('arrow')}</span></div>`).join('') || emptyState('check', 'Yaklaşan bir iş yok')}</div></div>
-    <div class="card"><div class="card-head"><h3>Mülk performansı</h3><a class="btn btn-sm" href="#/verim">Zam & verim ${icon('arrow')}</a></div>
+  </div>
+  <div class="mt"><div class="card"><div class="card-head"><h3>Mülk performansı</h3><a class="btn btn-sm" href="#/verim">Zam & verim ${icon('arrow')}</a></div>
       <div class="table-wrap"><table><thead><tr><th>Mülk</th><th class="hide-sm">Kiracı</th><th class="right">Kira</th><th class="right">Zam pot.</th></tr></thead><tbody>
       ${s.properties.map((p) => { const t = activeTenant(s, p.id); const ri = t && rentInfo(t, s);
         return `<tr><td><span class="pill">${esc(p.name)}</span></td><td class="hide-sm">${t ? esc(t.name) : '<span class="neg">Boş</span>'}</td>
           <td class="right num">${t ? compact(t.rent) : '—'}</td><td class="right num">${ri ? `<span class="${ri.due ? 'acc' : 'pos'}">+${compact(ri.maxInc)} ${ri.due ? icon('up') : ''}</span>` : '—'}</td></tr>`; }).join('') || `<tr><td colspan="4">${emptyState('building', 'Mülk yok')}</td></tr>`}
-      </tbody></table></div></div>
+      </tbody></table></div></div></div>
   </div>`;
   lineChart(el.querySelector('#ovChart'), {
     labels: months.map((x) => MONTHS[+x.slice(5) - 1]), height: 280,
     series: [
-      { name: 'Gelir', color: '#ff7a1a', values: data.map((x) => x.gelir), area: true },
-      { name: 'Gider', color: '#6b7cff', values: data.map((x) => x.gider) },
-      { name: 'Net', color: '#2ecc71', values: data.map((x) => x.net), dash: true },
+      { name: 'Gelir', color: '#ff5a1f', values: data.map((x) => x.gelir), area: true },
+      { name: 'Gider', color: '#ffc27a', values: data.map((x) => x.gider) },
+      { name: 'Net', color: '#ff3b30', values: data.map((x) => x.net), dash: true },
     ],
     tipTitle: (i) => date(months[i], { month: 'long', year: 'numeric' }),
   });
+  const hs = healthScores(s);
+  radar(el.querySelector('#ovRadar'), { axes: hs.map((x) => x[0]), series: [
+    { name: 'Hedef', color: '#ffc27a', values: hs.map(() => 0.8), fill: 0.06, dash: true },
+    { name: 'Mevcut', color: '#ff5a1f', values: hs.map((x) => x[1]), fill: 0.38 },
+  ] });
+  el.querySelector('#ovScores').innerHTML = hs.map(([a, v]) => `<span>${esc(a)} <b style="color:var(--text)">${Math.round(v * 100)}</b></span>`).join('');
   bind(el, '[data-sc]', (d) => { ovScope = d.sc; refresh(); });
   bind(el, '[data-go]', (d) => { location.hash = d.go; });
   bind(el, '[data-add]', () => document.getElementById('quickAdd').click());
@@ -206,7 +242,7 @@ export function debtsView(el, scope) {
   <div class="card mt"><div class="card-head"><div><h3>12 aylık ödeme planı</h3><small>Mevcut borçlara göre aylık taksit yükü</small></div></div><div id="dChart"></div></div>
   <div class="grid g-2 mt">${open.map(card).join('') || `<div class="card">${emptyState('card', 'Aktif borç yok 🎉', `<button class="btn btn-primary" data-new>${icon('plus')} Borç ekle</button>`)}</div>`}</div>
   ${closed.length ? `<h3 style="margin:24px 0 12px">Kapanan borçlar</h3><div class="grid g-2">${closed.map(card).join('')}</div>` : ''}`;
-  lineChart(el.querySelector('#dChart'), { labels: plan.map((x) => MONTHS[+x.m.slice(5) - 1]), series: [{ name: 'Taksit', color: '#b36bff', values: plan.map((x) => x.t), area: true }], height: 180, bars: true });
+  lineChart(el.querySelector('#dChart'), { labels: plan.map((x) => MONTHS[+x.m.slice(5) - 1]), series: [{ name: 'Taksit', color: '#ff5a1f', values: plan.map((x) => x.t), area: true }], height: 180, bars: true });
   bind(el, '[data-new]', () => editDebt(null, scope));
   bind(el, '[data-edit]', (d) => editDebt(byId(s.debts, d.edit)));
   bind(el, '[data-pay]', (d) => payInstallment(byId(s.debts, d.pay)));
@@ -236,7 +272,7 @@ export function sahsiPanel(el) {
   </div>
   <div class="grid g-main mt">
     <div class="card"><div class="card-head"><div><h3>Şahsi nakit akışı</h3><small>Son 12 ay</small></div>
-      <div class="legend"><span style="color:var(--accent)"><i style="background:var(--accent)"></i>Gelir</span><span style="color:var(--blue)"><i style="background:var(--blue)"></i>Gider</span></div></div><div id="sChart"></div></div>
+      <div class="legend"><span style="color:var(--accent)"><i style="background:var(--accent)"></i>Gelir</span><span style="color:var(--cream)"><i style="background:var(--cream)"></i>Gider</span></div></div><div id="sChart"></div></div>
     <div class="card"><div class="card-head"><h3>Harcama dağılımı</h3><small>Son 3 ay</small></div><div id="sDonut"></div></div>
   </div>
   <div class="grid g-2 mt">
@@ -247,7 +283,7 @@ export function sahsiPanel(el) {
   </div>`;
   lineChart(el.querySelector('#sChart'), {
     labels: months.map((x) => MONTHS[+x.slice(5) - 1]),
-    series: [{ name: 'Gelir', color: '#ff7a1a', values: m.map((x) => x.gelir), area: true }, { name: 'Gider', color: '#6b7cff', values: m.map((x) => x.gider) }],
+    series: [{ name: 'Gelir', color: '#ff5a1f', values: m.map((x) => x.gelir), area: true }, { name: 'Gider', color: '#ffc27a', values: m.map((x) => x.gider) }],
     tipTitle: (i) => date(months[i], { month: 'long', year: 'numeric' }),
   });
   donut(el.querySelector('#sDonut'), Object.entries(cats).sort((a, b) => b[1] - a[1]).map(([label, value]) => ({ label, value })), { center: '3 ay gider' });
@@ -401,7 +437,7 @@ export function notesView(el) {
 }
 
 // ======================= AYARLAR =======================
-export function settingsView(el, { onLock }) {
+export function settingsView(el, { onLock, onSync, syncStatus, onPassword }) {
   const s = st(), cfg = s.settings;
   const years = Object.keys(cfg.tax).sort();
   el.innerHTML = head('Ayarlar', 'Vergi parametreleri, güvenlik ve yedekleme') + `
@@ -429,6 +465,30 @@ export function settingsView(el, { onLock }) {
       <div class="actions"><button class="btn" data-a="demo">Örnek veri yükle</button><button class="btn btn-danger" data-a="clear">Tüm kayıtları temizle</button><button class="btn btn-danger" data-a="wipe">Kasayı sil (şifre dahil)</button></div>
       <input type="file" id="impFile" accept=".json" hidden></div>
   </div>
+  <div class="card mt" id="syncCard"><div class="card-head"><div><h3>Cihazlar arası senkron</h3><small>Telefon ve bilgisayar aynı verileri, aynı şifreyle görsün</small></div>
+      <span class="badge ${cfg.sync?.enabled ? 'up' : ''}">${cfg.sync?.enabled ? 'Açık' : 'Kapalı'}</span></div>
+    <div class="grid g-2">
+      <div>
+        <div class="note blue" style="margin-bottom:12px">${icon('shield')} Kasanız <b>şifreli haliyle</b> GitHub'daki <b>gizli</b> reponuza (<code>kasa-data</code>) kaydedilir. Şifreniz olmadan kimse — GitHub dahil — içeriği okuyamaz. Değişiklikler birkaç saniye içinde diğer cihaza geçer. Şifre değişikliği de otomatik olarak diğer cihaza geçer.</div>
+        <div class="form-grid">
+          <div class="field"><label>GitHub kullanıcı adı</label><input type="text" id="syOwner" value="${esc(cfg.sync?.owner || 'umancflay')}"></div>
+          <div class="field"><label>Gizli veri reposu</label><input type="text" id="syRepo" value="${esc(cfg.sync?.repo || 'kasa-data')}"></div>
+          <div class="field full"><label>GitHub erişim anahtarı (token)</label><input type="password" id="syToken" value="${esc(cfg.sync?.token || '')}" placeholder="github_pat_…" autocomplete="off"></div>
+          <label class="check full"><input type="checkbox" id="syOn" ${cfg.sync?.enabled !== false ? 'checked' : ''}> Otomatik senkron açık</label>
+        </div>
+        <div class="actions"><button class="btn btn-primary" data-a="sysave">${icon('check')} Kaydet ve eşitle</button><button class="btn" data-a="synow">${icon('refresh')} Şimdi eşitle</button></div>
+        <p class="muted" style="font-size:12px">${syncStatus?.().msg ? esc(syncStatus().msg) + ' · ' + new Date(syncStatus().at).toLocaleTimeString('tr-TR') : ''}</p>
+      </div>
+      <div>
+        <h4 style="margin-bottom:8px">Anahtar (token) nasıl alınır? — bir kez</h4>
+        <div class="kv"><span>1. <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">GitHub → Yeni fine-grained token</a> sayfasını açın</span></div>
+        <div class="kv"><span>2. Token name: <b>kasa</b> · Expiration: <b>No expiration</b> (veya 1 yıl)</span></div>
+        <div class="kv"><span>3. Repository access → <b>Only select repositories</b> → <b>kasa-data</b></span></div>
+        <div class="kv"><span>4. Permissions → Repository permissions → <b>Contents: Read and write</b></span></div>
+        <div class="kv"><span>5. <b>Generate token</b> → kopyalayıp soldaki kutuya yapıştırın → Kaydet</span></div>
+        <p class="muted" style="font-size:12px">Bu anahtar yalnızca kasa-data reposuna erişebilir ve kasanızın içinde şifreli saklanır. Diğer cihazda kilit ekranındaki <b>"Buluttan eşitle"</b> ile aynı anahtarı bir kez girmeniz yeterli.</p>
+      </div>
+    </div></div>
   <div class="card mt"><div class="card-head"><div><h3>Vergi parametreleri</h3><small>Her yıl Ocak ayında güncellenir (Gelir Vergisi Genel Tebliği)</small></div><button class="btn btn-sm" data-a="year">${icon('plus')} Yıl ekle</button></div>
     <div class="table-wrap"><table><thead><tr><th>Yıl</th><th>Dilim sınırları (₺) — oranlar %15/20/27/35/40</th><th>Konut istisnası</th><th>Stopajlı beyan sınırı</th><th>İstisna gelir eşiği</th></tr></thead><tbody>
     ${years.map((y) => { const p = cfg.tax[y]; return `<tr><td><b>${y}</b></td>
@@ -454,13 +514,20 @@ export function settingsView(el, { onLock }) {
     S.save(); toast('Vergi parametresi güncellendi');
   }));
   const act = {
+    sysave: () => {
+      cfg.sync = { owner: el.querySelector('#syOwner').value.trim(), repo: el.querySelector('#syRepo').value.trim(), token: el.querySelector('#syToken').value.trim(), enabled: el.querySelector('#syOn').checked };
+      if (cfg.sync.enabled && !cfg.sync.token) { toast('Önce GitHub anahtarını girin', true); return; }
+      S.save(); toast('Senkron ayarları kaydedildi');
+      setTimeout(() => onSync?.(true), 600);
+    },
+    synow: () => onSync?.(true),
     pw: () => formModal({
       title: 'Şifre değiştir', values: {},
       fields: [{ k: 'old', label: 'Mevcut şifre', type: 'password', req: true, full: true }, { k: 'n1', label: 'Yeni şifre (min 8)', type: 'password', req: true }, { k: 'n2', label: 'Yeni şifre tekrar', type: 'password', req: true }],
       onSave: async (v) => {
         if (v.n1.length < 8) { toast('Şifre en az 8 karakter olmalı', true); return false; }
         if (v.n1 !== v.n2) { toast('Şifreler eşleşmiyor', true); return false; }
-        try { await S.changePassword(v.old, v.n1); toast('Şifre değiştirildi'); } catch (e) { toast(e.message, true); return false; }
+        try { await S.changePassword(v.old, v.n1); onPassword?.(v.n1); toast('Şifre değiştirildi — diğer cihazlar da yeni şifreyi kullanacak'); } catch (e) { toast(e.message, true); return false; }
       },
     }),
     export: async () => download(await S.exportBackup(), `kasa-yedek-${todayISO()}.json`),
